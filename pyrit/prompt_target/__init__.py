@@ -11,6 +11,7 @@ from pyrit.prompt_target.prompt_chat_target.azure_openai_gptv_chat_target import
 from pyrit.prompt_target.prompt_chat_target.azure_openai_gpto_chat_target import AzureOpenAIGPT4OChatTarget
 from pyrit.prompt_target.gandalf_target import GandalfTarget, GandalfLevel
 from pyrit.prompt_target.crucible_target import CrucibleTarget
+from pyrit.prompt_target.prompt_chat_target.unify_chat_target import UnifyChatTarget
 from pyrit.prompt_target.text_target import TextTarget
 from pyrit.prompt_target.tts_target import AzureTTSTarget
 from pyrit.prompt_target.dall_e_target import DALLETarget
@@ -26,6 +27,7 @@ __all__ = [
     "AzureOpenAICompletionTarget",
     "AzureOpenAIGPTVChatTarget",
     "AzureOpenAIGPT4OChatTarget",
+    "UnifyChatTarget",
     "AzureTTSTarget",
     "CrucibleTarget",
     "GandalfTarget",
