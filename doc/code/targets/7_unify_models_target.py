@@ -32,7 +32,7 @@ default_values.load_default_env()
 # There is an option to use the DefaultAzureCredential for User Authentication as well, for all AOAI Chat Targets.
 # When `use_aad_auth=True`, ensure the user has 'Cognitive Service OpenAI User' role assigned on the AOAI Resource
 # and `az login` is used to authenticate with the correct identity
-target = UnifyChatTarget
+target = UnifyChatTarget()
 import asyncio  # Required to run the event loop
 
 async def send_prompt():

@@ -18,6 +18,7 @@ from pyrit.models import ChatMessage, PromptRequestPiece, PromptRequestResponse
 from pyrit.models import construct_response_from_request
 from pyrit.prompt_target import PromptChatTarget, limit_requests_per_minute
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -31,12 +32,13 @@ class OpenAIChatInterface(PromptChatTarget):
     _client: OpenAI
     _async_client: AsyncOpenAI
 
-    @abstractmethod
-    def __init__(self) -> None:
-        """
-        Abstract openai chat target. Must set private variables applicably
-        """
-        pass
+    def __init__(
+        self,
+        *,
+        memory: MemoryInterface = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> None:
+        super().__init__(memory=memory, max_requests_per_minute=max_requests_per_minute)
 
     @limit_requests_per_minute
     async def send_prompt_async(self, *, prompt_request: PromptRequestResponse) -> PromptRequestResponse:
@@ -49,6 +51,7 @@ class OpenAIChatInterface(PromptChatTarget):
         logger.info(f"Sending the following prompt to the prompt target: {request}")
 
         try:
+            logger.info('Starting to process the request')
             resp_text = await self._complete_chat_async(
                 messages=messages,
                 top_p=self._top_p,
@@ -61,7 +64,8 @@ class OpenAIChatInterface(PromptChatTarget):
             response_entry = construct_response_from_request(request=request, response_text_pieces=[resp_text])
         except BadRequestError as bre:
             response_entry = handle_bad_request_exception(response_text=bre.message, request=request)
-
+            
+        logger.info('Finished processing the request')
         return response_entry
 
     def _parse_chat_completion(self, response):
@@ -74,7 +78,9 @@ class OpenAIChatInterface(PromptChatTarget):
         Returns:
             str: The generated response message
         """
+        logger.info('Parsing chat completion response')
         response_message = response.choices[0].message.content
+        logger.info(f'Parsed response message: {response_message}')
         return response_message
 
     @pyrit_target_retry
@@ -87,32 +93,8 @@ class OpenAIChatInterface(PromptChatTarget):
         frequency_penalty: float = 0.5,
         presence_penalty: float = 0.5,
     ) -> str:
-        """
-        Completes asynchronous chat request.
-
-        Sends a chat message to the OpenAI chat model and retrieves the generated response.
-
-        Args:
-            messages (list[ChatMessage]): The chat message objects containing the role and content.
-            max_tokens (int, optional): The maximum number of tokens to generate.
-                Defaults to 1024.
-            temperature (float, optional): Controls randomness in the response generation.
-                Defaults to 1.0.
-            top_p (float, optional): Probability mass for nucleus sampling (an alternative to
-                temperature). Tokens are sampled from the rescaled output probability distribution
-                whose support is the smallest set of tokens whose cumulative probability mass exceeds
-                top_p. So, with top_p = 0.1 only the top 10% of the tokens will be considered.
-                This technique helps increase output diversity and fluency.
-                It is recommended to set top_p or temperature, but not both.
-                Defaults to 1.0.
-            frequency_penalty (float, optional): Controls the frequency of generating the same lines of text.
-                Defaults to 0.5.
-            presence_penalty (float, optional): Controls the likelihood to talk about new topics.
-                Defaults to 0.5.
-
-        Returns:
-            str: The generated response message.
-        """
+        logger.info('Starting async chat completion')
+        logger.debug(f'Parameters - max_tokens: {max_tokens}, temperature: {temperature}, top_p: {top_p}, frequency_penalty: {frequency_penalty}, presence_penalty: {presence_penalty}')   
 
         response: ChatCompletion = await self._async_client.chat.completions.create(
             model=self._deployment_name,
@@ -136,6 +118,7 @@ class OpenAIChatInterface(PromptChatTarget):
                 raise EmptyResponseException(message="The chat returned an empty response.")
         else:
             raise PyritException(message=f"Unknown finish_reason {finish_reason}")
+        logger.info('Async chat completion finished')
         return extracted_response
 
     def _validate_request(self, *, prompt_request: PromptRequestResponse) -> None:
@@ -166,33 +149,8 @@ class UnifyChatTarget(OpenAIChatInterface):
         headers: Optional[dict[str, str]] = None,
         max_requests_per_minute: Optional[int] = None,
     ) -> None:
-        """
-        Class that initializes an openai chat target
-
-        Args:
-            deployment_name (str, optional): The name of the deployment. Defaults to the
-                DEPLOYMENT_ENVIRONMENT_VARIABLE environment variable .
-            endpoint (str, optional): The endpoint URL for the Azure OpenAI service.
-                Defaults to the ENDPOINT_URI_ENVIRONMENT_VARIABLE environment variable.
-            api_key (str, optional): The API key for accessing the Azure OpenAI service.
-                Defaults to the API_KEY_ENVIRONMENT_VARIABLE environment variable.
-            memory (MemoryInterface, optional): An instance of the MemoryInterface class
-                for storing conversation history. Defaults to None.
-            max_tokens (int, optional): The maximum number of tokens to generate in the response.
-                Defaults to 1024.
-            temperature (float, optional): The temperature parameter for controlling the
-                randomness of the response. Defaults to 1.0.
-            top_p (float, optional): The top-p parameter for controlling the diversity of the
-                response. Defaults to 1.0.
-            frequency_penalty (float, optional): The frequency penalty parameter for penalizing
-                frequently generated tokens. Defaults to 0.5.
-            presence_penalty (float, optional): The presence penalty parameter for penalizing
-                tokens that are already present in the conversation history. Defaults to 0.5.
-            max_requests_per_minute (int, optional): Number of requests the target can handle per
-                minute before hitting a rate limit. The number of requests sent to the target
-                will be capped at the value provided.
-        """
-        super().__init__(self, memory=memory, max_requests_per_minute=max_requests_per_minute)
+       
+        super().__init__(memory=memory, max_requests_per_minute=max_requests_per_minute)
 
         self._max_tokens = max_tokens
         self._temperature = temperature
@@ -211,16 +169,13 @@ class UnifyChatTarget(OpenAIChatInterface):
         if headers:
             self._client = OpenAI(api_key=api_key, 
                                   base_url=endpoint,
-                                  deployment_name=self._deployment_name, 
                                   default_headers=json.loads(str(headers)))
         else:
             self._client = OpenAI(
                 api_key=api_key,
                 base_url=endpoint,
-                deployment_name=self._deployment_name,
             )
         self._async_client = AsyncOpenAI(
             api_key=api_key,
             base_url=endpoint,
-            deployment_name=self._deployment_name,
         )
